@@ -6,12 +6,15 @@ import { PrismaService } from 'src/prisma.service';
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getUser(userId: string) {
+  async getUser(id: string) {
     const user = await this.prisma.user.findFirst({
       select: {
         id: true,
         email: true,
         firstName: true,
+      },
+      where: {
+        id,
       },
     });
     return user;

@@ -10,9 +10,4 @@ export class UsersController {
   getUsers() {
     return this.userService.getUsers();
   }
-
-  @Get('/:userId')
-  getUser(@Param('userId') userId: string) {
-    return this.userService.getUser(userId);
-  }
 }
