@@ -1,0 +1,11 @@
+{
+  "singleQuote": true,
+  "overrides": [
+    {
+      "files": ["*.js", "*.jsx", "*.ts", "*.tsx"],
+      "options": {
+        "singleQuote": true
+      }
+    }
+  ]
+}
