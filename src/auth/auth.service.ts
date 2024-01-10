@@ -6,6 +6,7 @@ import { JwtService } from '@nestjs/jwt';
 import { UserPayload } from './jwt.strategy';
 import { AuthError } from './auth.error.enum';
 import { CreateUserDto } from './dto/create-user.dto';
+import { User } from '@prisma/client';
 
 @Injectable()
 export class AuthService {
@@ -13,22 +14,48 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
   ) {}
+
   async login(authBody: AuthBody) {
     const { email, password } = authBody;
 
-    const existingUser = await this.prisma.user.findUnique({
-      where: {
-        email: email,
-      },
-    });
+    const existingUser = await this.findUserByEmail(email);
 
-    if (!existingUser) {
+    this.ensureUserExists(existingUser);
+
+    await this.validatePassword(password, existingUser.password);
+
+    return await this.authenticateUser(existingUser.id);
+  }
+
+  async register(registerBody: CreateUserDto) {
+    const { email, password, firstName } = registerBody;
+
+    const existingUser = await this.findUserByEmail(email);
+
+    this.ensureUserExists(existingUser);
+
+    const hashedPassword = await this.hashPassword(password);
+
+    const createdUser = await this.createUser(email, hashedPassword, firstName);
+
+    return await this.authenticateUser(createdUser.id);
+  }
+
+  private async findUserByEmail(email: string) {
+    return await this.prisma.user.findUnique({ where: { email } });
+  }
+
+  private ensureUserExists(user: User | null) {
+    if (!user) {
       throw new HttpException(AuthError.USER_NOT_EXIST, HttpStatus.NOT_FOUND);
     }
-    const isPasswordValid = await this.isPasswordValid(
-      password,
-      existingUser.password,
-    );
+  }
+
+  private async validatePassword(
+    plainPassword: string,
+    hashedPassword: string,
+  ) {
+    const isPasswordValid = await compare(plainPassword, hashedPassword);
 
     if (!isPasswordValid) {
       throw new HttpException(
@@ -36,44 +63,20 @@ export class AuthService {
         HttpStatus.UNAUTHORIZED,
       );
     }
-    return await this.authenticateUser(existingUser.id);
   }
 
-  async register(registerBody: CreateUserDto) {
-    const { email, password, firstName } = registerBody;
-
-    const existingUser = await this.prisma.user.findUnique({
-      where: {
-        email,
-      },
+  private async createUser(
+    email: string,
+    hashedPassword: string,
+    firstName: string,
+  ) {
+    return await this.prisma.user.create({
+      data: { email, password: hashedPassword, firstName },
     });
-
-    if (existingUser) {
-      throw new HttpException(
-        AuthError.EMAIL_ALREADY_IN_USE,
-        HttpStatus.CONFLICT,
-      );
-    }
-
-    const hashedPassword = await this.hashPassword(password);
-
-    const createdUser = await this.prisma.user.create({
-      data: {
-        email,
-        password: hashedPassword,
-        firstName,
-      },
-    });
-
-    return await this.authenticateUser(createdUser.id);
   }
 
   async hashPassword(password: string) {
     return hash(password, 10);
-  }
-
-  async isPasswordValid(password: string, hashedPassword: string) {
-    return await compare(password, hashedPassword);
   }
 
   async authenticateUser(userId: string) {
